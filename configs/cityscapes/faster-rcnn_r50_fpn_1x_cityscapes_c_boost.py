@@ -11,14 +11,30 @@ vis_backends = [
 visualizer = dict(
     type='DetLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 
+default_hooks = dict(
+    checkpoint=dict(
+        max_keep_ckpts=2,
+        type='CheckpointHook'))
+
 model = dict(
+    type='FasterRCNNCBoost',
+    data_preprocessor=dict(
+        type='MultiBranchDataPreprocessor',
+        _delete_=True,
+        data_preprocessor=dict(
+            type='DetDataPreprocessor',
+            mean=[123.675, 116.28, 103.53],
+            std=[58.395, 57.12, 57.375],
+            bgr_to_rgb=True,
+            pad_size_divisor=32)),
     backbone=dict(init_cfg=None),
     roi_head=dict(
         bbox_head=dict(
             num_classes=8,
             loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0))),
     train_cfg=dict(
-        rcnn=dict(dropout=False)))
+        rcnn=dict(dropout=False)),
+    scale_factor=0.01)
 
 # actual epoch = 2 * 8 = 16
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=2, val_interval=1)
@@ -55,16 +71,32 @@ load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_
 # TODO: support auto scaling lr
 # auto_scale_lr = dict(base_batch_size=8)
 
+
 backend_args = None
+augment_pipeline = [
+    dict(type='BoostTransform',kernel_size=3, sigma=4, groups=range(1, 1025), phases=(0., 1.), granularity=448),
+    dict(type='PackDetInputs',meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
+                            'scale_factor', 'flip', 'foreground_label','foreground_bbox'))
+]
+
+original_pipeline = [
+    dict(type='PackDetInputs')
+]
+
+branch_field = ['original', 'augment']
 train_pipeline = [
     dict(type='LoadImageFromFile', backend_args=backend_args),
     dict(type='LoadAnnotations', with_bbox=True),
+    dict(type='FilterAnnotations',
+        keep_empty=False),  #dwd存在空的gt
     dict(type='RandomResize',scale=[(2048, 800), (2048, 1024)],keep_ratio=True),
     dict(type='RandomFlip', prob=0.5),
-    dict(type='PhysAug_L',kernel_size=3, sigma=4, groups=range(1, 1025), phases=(0., 1.), granularity=448),
-    #dict(type='Resize', scale=(1000, 600), keep_ratio=True),
-    #dict(type='RandomResize',scale=[(1280, 600), (1280, 720)],keep_ratio=True),
-    dict(type='PackDetInputs')
+    dict(
+        type='MultiBranch',
+        branch_field=branch_field,
+        original=original_pipeline,
+        augment=augment_pipeline
+    )
 ]
 
 env_cfg = dict(
@@ -72,7 +104,7 @@ env_cfg = dict(
 )
 
 dataset_type = 'CityscapesDataset'
-data_root = '/data2/xxr/datasets/cityscapes/'
+data_root = '/data01/public_dataset/xu/cityscapes/'
 train_dataloader = dict(
     batch_size=4,#2gpu*4bs lr 0.01    1gpu*4bs lr 0.005
     num_workers=2,
@@ -103,19 +135,19 @@ test_pipeline = [
                    'scale_factor'))
 ]
 
-test_dataloader = dict(
-    batch_size=1,
-    num_workers=2,
-    persistent_workers=True,
-    drop_last=False,
-    sampler=dict(type='DefaultSampler', shuffle=False),
-    dataset=dict(
-        type=dataset_type,
-        data_root='/data2/xxr/datasets/tmp',
-        ann_file='annotations/instancesonly_filtered_gtFine_val.json',
-        data_prefix=dict(img='jpeg_compression/5/'),
-        test_mode=True,
-        filter_cfg=dict(filter_empty_gt=True, min_size=32),
-        pipeline=test_pipeline,
-        backend_args=backend_args))
+# test_dataloader = dict(
+#     batch_size=1,
+#     num_workers=2,
+#     persistent_workers=True,
+#     drop_last=False,
+#     sampler=dict(type='DefaultSampler', shuffle=False),
+#     dataset=dict(
+#         type=dataset_type,
+#         data_root='/data01/public_dataset/xu/cityscapes-c',
+#         ann_file='annotations/instancesonly_filtered_gtFine_val.json',
+#         data_prefix=dict(img='gaussian_noise/5/'),
+#         test_mode=True,
+#         filter_cfg=dict(filter_empty_gt=True, min_size=32),
+#         pipeline=test_pipeline,
+#         backend_args=backend_args))
 

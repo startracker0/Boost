@@ -12,14 +12,32 @@ vis_backends = [
 visualizer = dict(
     type='DetLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 
-#caffe without fpn
+default_hooks = dict(
+    checkpoint=dict(
+        max_keep_ckpts=2,
+        type='CheckpointHook'))
+
 model = dict(
+    type='FasterRCNNCBoost',
+    data_preprocessor=dict(
+        type='MultiBranchDataPreprocessor',
+        _delete_=True,
+        data_preprocessor=dict(
+            type='DetDataPreprocessor',
+            mean=[103.530, 116.280, 123.675],
+            std=[1.0, 1.0, 1.0],
+            bgr_to_rgb=False,
+            pad_size_divisor=32)),
     backbone=dict(
+        type='ResNet',
         depth=101,
+        # out_indices=(0, 1, 2, 3),
         init_cfg=dict(
             type='Pretrained',
-            checkpoint='open-mmlab://detectron2/resnet101_caffe')), #'torchvision://resnet101'  choose the resnet101 without fpn accoring to the paper of cdsd
-    roi_head=dict(bbox_head=dict(num_classes=7)))
+            checkpoint='open-mmlab://detectron2/resnet101_caffe')),
+    roi_head=dict(bbox_head=dict(num_classes=7)),
+    dataset_name='dwd',
+    scale_factor=0.03)
 
 # training schedule for 20e
 train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=10, val_interval=1)
@@ -46,13 +64,36 @@ optim_wrapper = dict(
     clip_grad=None)
 
 backend_args = None
+# augment_pipeline = [
+#     dict(type='PhysAug_ICCV',kernel_size=3, sigma=4, groups=range(1, 1025), phases=(0., 1.), granularity=448),
+#     dict(type='PackDetInputs',meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
+#                             'scale_factor', 'flip', 'foreground_label','foreground_bbox'))
+# ]
+augment_pipeline = [
+    dict(type='BoostTransform',kernel_size=3, sigma=4, groups=range(1, 1025), phases=(0., 1.), granularity=448),
+    dict(type='PackDetInputs',meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
+                            'scale_factor', 'flip'))
+]
+
+original_pipeline = [
+    dict(type='PackDetInputs')
+]
+
+branch_field = ['original', 'augment']
 train_pipeline = [
     dict(type='LoadImageFromFile', backend_args=backend_args),
     dict(type='LoadAnnotations', with_bbox=True),
-    dict(type='PhysAug_L',kernel_size=3, sigma=4, groups=range(1, 1025), phases=(0., 1.), granularity=448,decay=0.2),
+    dict(type='FilterAnnotations',
+        keep_empty=False),  #dwd存在空的gt
     dict(type='RandomResize',scale=[(2048, 800), (2048, 1024)],keep_ratio=True),
+    # dict(type='Resize', scale=(1000, 600), keep_ratio=True),
     dict(type='RandomFlip', prob=0.5),
-    dict(type='PackDetInputs')
+    dict(
+        type='MultiBranch',
+        branch_field=branch_field,
+        original=original_pipeline,
+        augment=augment_pipeline
+    )
 ]
 
 env_cfg = dict(
@@ -60,10 +101,10 @@ env_cfg = dict(
 )
 
 dataset_type = 'DiverseWeatherDataset'
-data_root = '/data2/xxr/datasets/DWD/daytime_clear'
+data_root = '/data01/public_dataset/xu/DWD/daytime_clear'
 
 train_dataloader = dict(
-    batch_size=2, #2*1bs=1*2bs
+    batch_size=1, #2*1bs=1*2bs lr0.001  2*2bs=1*4bs lr0.002
     num_workers=4,
     persistent_workers=True,
     drop_last=False,
@@ -80,9 +121,12 @@ train_dataloader = dict(
             pipeline=train_pipeline,
             backend_args=None)))
 
+
+
 test_pipeline = [
     dict(type='LoadImageFromFile', backend_args=backend_args),
     dict(type='Resize', scale=(2048, 1024), keep_ratio=True),
+    # dict(type='Resize', scale=(1000, 600), keep_ratio=True),
     # avoid bboxes being resized
     dict(type='LoadAnnotations', with_bbox=True),
     dict(
@@ -107,19 +151,19 @@ val_dataloader = dict(
         backend_args=backend_args))
 test_dataloader = val_dataloader
 
-# dataset_type = 'DiverseWeatherDataset'
-# test_root = '/data2/xxr/datasets/DWD/night_rainy/'
-# test_dataloader = dict(
-#     batch_size=1,
-#     num_workers=1,
-#     persistent_workers=True,
-#     drop_last=False,
-#     sampler=dict(type='DefaultSampler', shuffle=False),
-#     dataset=dict(
-#         type=dataset_type,
-#         data_root=test_root,
-#         ann_file='VOC2007/ImageSets/Main/train.txt',
-#         data_prefix=dict(sub_data_root='VOC2007/'),
-#         test_mode=True,
-#         pipeline=test_pipeline,
-#         backend_args=None))
+dataset_type = 'DiverseWeatherDataset'
+test_root = '/data01/public_dataset/xu/DWD/night_sunny/'
+test_dataloader = dict(
+    batch_size=1,
+    num_workers=1,
+    persistent_workers=True,
+    drop_last=False,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset=dict(
+        type=dataset_type,
+        data_root=test_root,
+        ann_file='VOC2007/ImageSets/Main/train.txt',
+        data_prefix=dict(sub_data_root='VOC2007/'),
+        test_mode=True,
+        pipeline=test_pipeline,
+        backend_args=None))
