@@ -64,11 +64,7 @@ optim_wrapper = dict(
     clip_grad=None)
 
 backend_args = None
-# augment_pipeline = [
-#     dict(type='PhysAug_ICCV',kernel_size=3, sigma=4, groups=range(1, 1025), phases=(0., 1.), granularity=448),
-#     dict(type='PackDetInputs',meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-#                             'scale_factor', 'flip', 'foreground_label','foreground_bbox'))
-# ]
+
 augment_pipeline = [
     dict(type='BoostTransform',kernel_size=3, sigma=4, groups=range(1, 1025), phases=(0., 1.), granularity=448),
     dict(type='PackDetInputs',meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
