@@ -102,4 +102,4 @@ For questions or collaborations, feel free to contact me.
 
 ## 📌 Acknowledgements
 
-This repository is built upon [MMDetection](https://github.com/open-mmlab/mmdetection) and [OpenCLIP](https://github.com/mlfoundations/open_clip). We thank the authors for their contributions to the community.
+This repository is built upon [MMDetection](https://github.com/open-mmlab/mmdetection) and [CLIP](https://github.com/openai/CLIP). We thank the authors for their contributions to the community.
